@@ -9,8 +9,13 @@ import io
 # ── Configuración ──────────────────────────────────────────────
 GROQ_API_KEY         = os.environ["GROQ_API_KEY"]
 LINKEDIN_TOKEN       = os.environ["LINKEDIN_ACCESS_TOKEN"]
-LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"]  # Debe ser urn:li:member:D4E03AQFmuZM-LfmT4w
+LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"] 
 HF_TOKEN             = os.environ["HF_TOKEN"]
+
+# ASEGÚRATE de que tu secreto LINKEDIN_PERSON_URN vuelva a ser: urn:li:person:D4E03AQFmuZM-LfmT4w
+if not LINKEDIN_PERSON_URN.startswith("urn:li:person:"):
+    # Corrección automática en caliente si se te olvidó cambiar el secreto en GitHub
+    LINKEDIN_PERSON_URN = LINKEDIN_PERSON_URN.replace("urn:li:member:", "urn:li:person:")
 
 TOPICS = [
     "inteligencia artificial en negocios",
@@ -76,70 +81,78 @@ img.save(buffer, format="JPEG")
 image_bytes = buffer.getvalue()
 print("✅ Imagen generada en memoria")
 
-# ── 4. Subir imagen a LinkedIn (API Versionada) ─────────────────
+# ── 4. Registrar y Subir imagen (Compatibilidad Universal v2) ──
 headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "application/json",
-    "LinkedIn-Version": "202401",  # Versión requerida por la API moderna de posts/images
-    "X-Restli-Protocol-Version": "2.0.0"
 }
 
-image_init_payload = {
-    "initializeUploadRequest": {
-        "owner": LINKEDIN_PERSON_URN
+# Usamos el endpoint clásico de assets que no requiere permisos avanzados de empresa
+register_payload = {
+    "registerUploadRequest": {
+        "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
+        "owner": LINKEDIN_PERSON_URN,
+        "serviceRelationships": [
+            {
+                "relationshipType": "OWNER",
+                "identifier": "urn:li:userGeneratedContent"
+            }
+        ]
     }
 }
 
-print("Iniciando carga de imagen...")
+print("Registrando asset de imagen...")
 reg = requests.post(
-    "https://api.linkedin.com/v2/images?action=initializeUpload",
-    json=image_init_payload, headers=headers
+    "https://api.linkedin.com/v2/assets?action=registerUpload",
+    json=register_payload, headers=headers
 )
 
 if reg.status_code != 200:
-    print(f"❌ Error detallado de LinkedIn: {reg.text}")
+    print(f"❌ Error al registrar imagen: {reg.text}")
 reg.raise_for_status()
 
 reg_data = reg.json()
-upload_url = reg_data["value"]["uploadUrl"]
-asset_urn  = reg_data["value"]["image"]
+upload_url = reg_data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
+asset_urn  = reg_data["value"]["asset"]
 
-# Subida binaria del archivo
+# Carga binaria de los bytes
 upload_headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "image/jpeg"
 }
 up = requests.put(upload_url, data=image_bytes, headers=upload_headers)
 up.raise_for_status()
-print("✅ Imagen subida a los servidores de LinkedIn")
+print("✅ Imagen subida a LinkedIn")
 
-# ── 5. Crear y publicar el Post ──────────────────────────────────
+# ── 5. Crear el Post vía ugcPosts (El método más tolerante con permisos) ──
 post_payload = {
     "author": LINKEDIN_PERSON_URN,
-    "commentary": post_text,
-    "visibility": "PUBLIC",
-    "distribution": {
-        "feedDistribution": "MAIN_FEED",
-        "targetEntities": [],
-        "thirdPartyDistributionChannels": []
-    },
-    "content": {
-        "media": {
-            "title": titulo,
-            "id": asset_urn
+    "lifecycleState": "PUBLISHED",
+    "specificContent": {
+        "com.linkedin.ugc.ShareContent": {
+            "shareCommentary": {"text": post_text},
+            "shareMediaCategory": "IMAGE",
+            "media": [{
+                "status": "READY",
+                "description": {"text": titulo},
+                "media": asset_urn,
+                "title": {"text": titulo}
+            }]
         }
     },
-    "lifecycleState": "PUBLISHED"
+    "visibility": {
+        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+    }
 }
 
-print("Publicando post en tu muro...")
+print("Publicando post...")
 post_resp = requests.post(
-    "https://api.linkedin.com/v2/posts",
+    "https://api.linkedin.com/v2/ugcPosts",
     json=post_payload, headers=headers
 )
 
-if post_resp.status_code != 201:  # El estatus de creación exitosa en /posts suele ser 201 Created
-    print(f"❌ Error detallado al publicar post: {post_resp.text}")
+if post_resp.status_code != 201:
+    print(f"❌ Error al publicar: {post_resp.text}")
 post_resp.raise_for_status()
 
-print("✅ ¡Post publicado con éxito en LinkedIn!")
+print(f"✅ ¡Post publicado exitosamente! ID: {post_resp.headers.get('x-restli-id')}")
