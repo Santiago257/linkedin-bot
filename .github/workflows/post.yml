@@ -1,0 +1,28 @@
+name: LinkedIn Auto Post
+
+on:
+  schedule:
+    # Publica de lunes a viernes a las 9:00 AM hora Ciudad de México (UTC-6 = 15:00 UTC)
+    - cron: '0 15 * * 1-5'
+  workflow_dispatch:  # Permite ejecutarlo manualmente también
+
+jobs:
+  post:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run post script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LINKEDIN_ACCESS_TOKEN: ${{ secrets.LINKEDIN_ACCESS_TOKEN }}
+          LINKEDIN_PERSON_URN: ${{ secrets.LINKEDIN_PERSON_URN }}
+        run: python post.py
