@@ -53,7 +53,7 @@ print("✅ Texto generado")
 # ── 3. Generar imagen con Pollinations.AI ──────────────────────
 import urllib.parse
 encoded_prompt = urllib.parse.quote(img_prompt)
-image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=628&nologo=true"
+image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
 
 img_response = requests.get(image_url, timeout=60)
 img_response.raise_for_status()
