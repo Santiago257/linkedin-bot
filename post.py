@@ -3,6 +3,8 @@ import re
 import requests
 import datetime
 from groq import Groq
+from PIL import Image, ImageDraw
+import io
 
 # ── Configuración ──────────────────────────────────────────────
 GROQ_API_KEY         = os.environ["GROQ_API_KEY"]
@@ -25,7 +27,7 @@ topic = TOPICS[datetime.date.today().weekday() % len(TOPICS)]
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 prompt = f"""
-Eres un experto en {topic}. Crea un post viral para LinkedIn con:
+Eres un expert en {topic}. Crea un post viral para LinkedIn con:
 - Un título gancho de máximo 12 palabras (sin comillas)
 - Una descripción atractiva de 150-200 palabras con emojis
 - 5 hashtags relevantes
@@ -51,15 +53,10 @@ img_prompt  = re.search(r"PROMPT_IMAGEN:\s*(.+)", text).group(1).strip()
 post_text = f"{titulo}\n\n{descripcion}\n\n{hashtags}"
 print("✅ Texto generado")
 
-# ── 3. Generar imagen con Hugging Face ────────────────────────
-# ── 3. Generar imagen con texto (sin red externa) ─────────────
-from PIL import Image, ImageDraw, ImageFont
-import io
-
+# ── 3. Generar imagen local con Pillow ─────────────────────────
 img = Image.new("RGB", (1200, 628), color=(13, 110, 253))
 draw = ImageDraw.Draw(img)
 
-# Texto del título en la imagen
 words = titulo.split()
 lines, line = [], []
 for word in words:
@@ -77,66 +74,66 @@ for l in lines:
 buffer = io.BytesIO()
 img.save(buffer, format="JPEG")
 image_bytes = buffer.getvalue()
-print("✅ Imagen generada")
+print("✅ Imagen generada en memoria")
 
-# ── 4. Subir imagen a LinkedIn ──────────────────────────────────
+# ── 4. Subir imagen a LinkedIn (API Moderna) ───────────────────
+# Usamos encabezados globales incluyendo la versión obligatoria de la API
 headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "application/json",
+    "LinkedIn-Version": "202401" 
 }
 
-register_payload = {
-    "registerUploadRequest": {
-        "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-        "owner": LINKEDIN_PERSON_URN,
-        "serviceRelationships": [{
-            "relationshipType": "OWNER",
-            "identifier": "urn:li:userGeneratedContent"
-        }]
+# Inicializar la carga de la imagen
+image_init_payload = {
+    "initializeUploadRequest": {
+        "owner": LINKEDIN_PERSON_URN
     }
 }
+
+print("Iniciando carga de imagen...")
 reg = requests.post(
-    "https://api.linkedin.com/v2/assets?action=registerUpload",
-    json=register_payload, headers=headers
+    "https://api.linkedin.com/v2/images?action=initializeUpload",
+    json=image_init_payload, headers=headers
 )
 reg.raise_for_status()
 reg_data = reg.json()
 
-upload_url = reg_data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
-asset_urn  = reg_data["value"]["asset"]
+upload_url = reg_data["value"]["uploadUrl"]
+asset_urn  = reg_data["value"]["image"]  # Este es el ID único de la imagen generada (urn:li:image:...)
 
+# Subir los bytes binarios de la imagen
 upload_headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "image/jpeg",
 }
 up = requests.put(upload_url, data=image_bytes, headers=upload_headers)
 up.raise_for_status()
-print("✅ Imagen subida a LinkedIn")
+print("✅ Imagen subida a los servidores de LinkedIn")
 
-# ── 5. Crear el post ───────────────────────────────────────────
+# ── 5. Crear y publicar el Post (API Moderna) ──────────────────
 post_payload = {
     "author": LINKEDIN_PERSON_URN,
-    "lifecycleState": "PUBLISHED",
-    "specificContent": {
-        "com.linkedin.ugc.ShareContent": {
-            "shareCommentary": {"text": post_text},
-            "shareMediaCategory": "IMAGE",
-            "media": [{
-                "status": "READY",
-                "description": {"text": titulo},
-                "media": asset_urn,
-                "title": {"text": titulo}
-            }]
+    "commentary": post_text,
+    "visibility": "PUBLIC",
+    "distribution": {
+        "feedDistribution": "MAIN_FEED",
+        "targetEntities": [],
+        "thirdPartyDistributionChannels": []
+    },
+    "content": {
+        "media": {
+            "title": titulo,
+            "id": asset_urn
         }
     },
-    "visibility": {
-        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-    }
+    "lifecycleState": "PUBLISHED"
 }
 
+print("Publicando post en tu muro...")
 post_resp = requests.post(
-    "https://api.linkedin.com/v2/ugcPosts",
+    "https://api.linkedin.com/v2/posts",
     json=post_payload, headers=headers
 )
 post_resp.raise_for_status()
-print(f"✅ Post publicado: {post_resp.headers.get('x-restli-id')}")
+print("✅ ¡Post publicado con éxito en LinkedIn!")
