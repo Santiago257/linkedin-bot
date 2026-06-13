@@ -1,10 +1,10 @@
 import os
 import re
 import requests
-from google import genai
+from groq import Groq
 
 # ── Configuración ──────────────────────────────────────────────
-GEMINI_API_KEY       = os.environ["GEMINI_API_KEY"]
+groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
 LINKEDIN_TOKEN       = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"]
 
@@ -36,11 +36,11 @@ HASHTAGS: [#tag1 #tag2 #tag3 #tag4 #tag5]
 PROMPT_IMAGEN: [descripción en inglés de una imagen profesional que ilustre el tema, estilo fotorrealista]
 """
 
-response = client.models.generate_content(
-    model="gemini-2.0-flash-lite",
-    contents=prompt
+response = groq_client.chat.completions.create(
+    model="llama-3.3-70b-versatile",
+    messages=[{"role": "user", "content": prompt}]
 )
-text = response.text
+text = response.choices[0].message.content
 
 titulo      = re.search(r"TITULO:\s*(.+)",      text).group(1).strip()
 descripcion = re.search(r"DESCRIPCION:\s*([\s\S]+?)(?=HASHTAGS:)", text).group(1).strip()
