@@ -1,7 +1,7 @@
 import os
 import re
 import requests
-import google.generativeai as genai
+from google import genai
 
 # ── Configuración ──────────────────────────────────────────────
 GEMINI_API_KEY       = os.environ["GEMINI_API_KEY"]
@@ -21,8 +21,7 @@ import datetime
 topic = TOPICS[datetime.date.today().weekday() % len(TOPICS)]
 
 # ── 2. Generar texto con Gemini ────────────────────────────────
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")  # tier gratuito
+client = genai.Client(api_key=GEMINI_API_KEY)
 
 prompt = f"""
 Eres un experto en {topic}. Crea un post viral para LinkedIn con:
@@ -37,7 +36,10 @@ HASHTAGS: [#tag1 #tag2 #tag3 #tag4 #tag5]
 PROMPT_IMAGEN: [descripción en inglés de una imagen profesional que ilustre el tema, estilo fotorrealista]
 """
 
-response = model.generate_content(prompt)
+response = client.models.generate_content(
+    model="gemini-2.0-flash",
+    contents=prompt
+)
 text = response.text
 
 titulo      = re.search(r"TITULO:\s*(.+)",      text).group(1).strip()
