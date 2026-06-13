@@ -12,10 +12,9 @@ LINKEDIN_TOKEN       = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"] 
 HF_TOKEN             = os.environ["HF_TOKEN"]
 
-# ASEGÚRATE de que tu secreto LINKEDIN_PERSON_URN vuelva a ser: urn:li:person:D4E03AQFmuZM-LfmT4w
+# Asegurar que use estrictamente el formato "urn:li:person:..." que funcionó para la imagen
 if not LINKEDIN_PERSON_URN.startswith("urn:li:person:"):
-    # Corrección automática en caliente si se te olvidó cambiar el secreto en GitHub
-    LINKEDIN_PERSON_URN = LINKEDIN_PERSON_URN.replace("urn:li:member:", "urn:li:person:")
+    LINKEDIN_PERSON_URN = f"urn:li:person:{LINKEDIN_PERSON_URN.split(':')[-1]}"
 
 TOPICS = [
     "inteligencia artificial en negocios",
@@ -81,13 +80,12 @@ img.save(buffer, format="JPEG")
 image_bytes = buffer.getvalue()
 print("✅ Imagen generada en memoria")
 
-# ── 4. Registrar y Subir imagen (Compatibilidad Universal v2) ──
-headers = {
+# ── 4. Registrar y Subir imagen (Método v2 Assets Exitoso) ─────
+headers_asset = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "application/json",
 }
 
-# Usamos el endpoint clásico de assets que no requiere permisos avanzados de empresa
 register_payload = {
     "registerUploadRequest": {
         "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
@@ -104,18 +102,15 @@ register_payload = {
 print("Registrando asset de imagen...")
 reg = requests.post(
     "https://api.linkedin.com/v2/assets?action=registerUpload",
-    json=register_payload, headers=headers
+    json=register_payload, headers=headers_asset
 )
-
-if reg.status_code != 200:
-    print(f"❌ Error al registrar imagen: {reg.text}")
 reg.raise_for_status()
 
 reg_data = reg.json()
 upload_url = reg_data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
 asset_urn  = reg_data["value"]["asset"]
 
-# Carga binaria de los bytes
+# Subir bytes a LinkedIn
 upload_headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "image/jpeg"
@@ -124,35 +119,41 @@ up = requests.put(upload_url, data=image_bytes, headers=upload_headers)
 up.raise_for_status()
 print("✅ Imagen subida a LinkedIn")
 
-# ── 5. Crear el Post vía ugcPosts (El método más tolerante con permisos) ──
+# ── 5. Publicar usando el Endpoint de Posts Moderno ───────────
+# Este endpoint sí acepta tu ID alfanumérico en el parámetro "author"
+headers_post = {
+    "Authorization": f"Bearer {LINKEDIN_TOKEN}",
+    "Content-Type": "application/json",
+    "LinkedIn-Version": "202401",  # Requerido de forma estricta para /posts
+    "X-Restli-Protocol-Version": "2.0.0"
+}
+
 post_payload = {
     "author": LINKEDIN_PERSON_URN,
-    "lifecycleState": "PUBLISHED",
-    "specificContent": {
-        "com.linkedin.ugc.ShareContent": {
-            "shareCommentary": {"text": post_text},
-            "shareMediaCategory": "IMAGE",
-            "media": [{
-                "status": "READY",
-                "description": {"text": titulo},
-                "media": asset_urn,
-                "title": {"text": titulo}
-            }]
+    "commentary": post_text,
+    "visibility": "PUBLIC",
+    "distribution": {
+        "feedDistribution": "MAIN_FEED",
+        "targetEntities": [],
+        "thirdPartyDistributionChannels": []
+    },
+    "content": {
+        "media": {
+            "title": titulo,
+            "id": asset_urn
         }
     },
-    "visibility": {
-        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
-    }
+    "lifecycleState": "PUBLISHED"
 }
 
 print("Publicando post...")
 post_resp = requests.post(
-    "https://api.linkedin.com/v2/ugcPosts",
-    json=post_payload, headers=headers
+    "https://api.linkedin.com/v2/posts",
+    json=post_payload, headers=headers_post
 )
 
-if post_resp.status_code != 201:
+if post_resp.status_code not in [200, 201]:
     print(f"❌ Error al publicar: {post_resp.text}")
 post_resp.raise_for_status()
 
-print(f"✅ ¡Post publicado exitosamente! ID: {post_resp.headers.get('x-restli-id')}")
+print("✅ ¡Post publicado con éxito total en LinkedIn!")
