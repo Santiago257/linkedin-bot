@@ -1,10 +1,11 @@
 import os
 import re
 import requests
+import datetime
 from groq import Groq
 
 # ── Configuración ──────────────────────────────────────────────
-groq_client = Groq(api_key=os.environ["GROQ_API_KEY"])
+GROQ_API_KEY         = os.environ["GROQ_API_KEY"]
 LINKEDIN_TOKEN       = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"]
 
@@ -16,12 +17,11 @@ TOPICS = [
     "tendencias tech 2025",
 ]
 
-# ── 1. Elegir tema del día (rota por día de la semana) ─────────
-import datetime
+# ── 1. Elegir tema del día ─────────────────────────────────────
 topic = TOPICS[datetime.date.today().weekday() % len(TOPICS)]
 
-# ── 2. Generar texto con Gemini ────────────────────────────────
-client = genai.Client(api_key=GEMINI_API_KEY)
+# ── 2. Generar texto con Groq ──────────────────────────────────
+groq_client = Groq(api_key=GROQ_API_KEY)
 
 prompt = f"""
 Eres un experto en {topic}. Crea un post viral para LinkedIn con:
@@ -50,7 +50,7 @@ img_prompt  = re.search(r"PROMPT_IMAGEN:\s*(.+)", text).group(1).strip()
 post_text = f"{titulo}\n\n{descripcion}\n\n{hashtags}"
 print("✅ Texto generado")
 
-# ── 3. Generar imagen con Pollinations.AI (gratis, sin API key) ─
+# ── 3. Generar imagen con Pollinations.AI ──────────────────────
 import urllib.parse
 encoded_prompt = urllib.parse.quote(img_prompt)
 image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width=1200&height=628&nologo=true"
@@ -66,7 +66,6 @@ headers = {
     "Content-Type": "application/json",
 }
 
-# 4a. Registrar el upload
 register_payload = {
     "registerUploadRequest": {
         "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
@@ -87,7 +86,6 @@ reg_data = reg.json()
 upload_url = reg_data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
 asset_urn  = reg_data["value"]["asset"]
 
-# 4b. Subir los bytes de la imagen
 upload_headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "image/jpeg",
