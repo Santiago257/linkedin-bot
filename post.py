@@ -52,17 +52,31 @@ post_text = f"{titulo}\n\n{descripcion}\n\n{hashtags}"
 print("✅ Texto generado")
 
 # ── 3. Generar imagen con Hugging Face ────────────────────────
-hf_headers = {"Authorization": f"Bearer {HF_TOKEN}"}
-hf_payload = {"inputs": img_prompt}
+# ── 3. Generar imagen con texto (sin red externa) ─────────────
+from PIL import Image, ImageDraw, ImageFont
+import io
 
-hf_response = requests.post(
-    "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
-    headers=hf_headers,
-    json=hf_payload,
-    timeout=120
-)
-hf_response.raise_for_status()
-image_bytes = hf_response.content
+img = Image.new("RGB", (1200, 628), color=(13, 110, 253))
+draw = ImageDraw.Draw(img)
+
+# Texto del título en la imagen
+words = titulo.split()
+lines, line = [], []
+for word in words:
+    line.append(word)
+    if len(" ".join(line)) > 30:
+        lines.append(" ".join(line[:-1]))
+        line = [word]
+lines.append(" ".join(line))
+
+y = 628 // 2 - len(lines) * 40 // 2
+for l in lines:
+    draw.text((600, y), l, fill="white", anchor="mm")
+    y += 50
+
+buffer = io.BytesIO()
+img.save(buffer, format="JPEG")
+image_bytes = buffer.getvalue()
 print("✅ Imagen generada")
 
 # ── 4. Subir imagen a LinkedIn ──────────────────────────────────
