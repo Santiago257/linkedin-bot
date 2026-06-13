@@ -12,7 +12,7 @@ LINKEDIN_TOKEN       = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"] 
 HF_TOKEN             = os.environ["HF_TOKEN"]
 
-# Asegurar que use estrictamente el formato "urn:li:person:..." que funcionó para la imagen
+# Asegurar que el formato base para la carga de imágenes sea "urn:li:person:..."
 if not LINKEDIN_PERSON_URN.startswith("urn:li:person:"):
     LINKEDIN_PERSON_URN = f"urn:li:person:{LINKEDIN_PERSON_URN.split(':')[-1]}"
 
@@ -86,6 +86,7 @@ headers_asset = {
     "Content-Type": "application/json",
 }
 
+# Aquí usamos estrictamente el URN con tipo 'person'
 register_payload = {
     "registerUploadRequest": {
         "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
@@ -110,7 +111,7 @@ reg_data = reg.json()
 upload_url = reg_data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
 asset_urn  = reg_data["value"]["asset"]
 
-# Subir bytes a LinkedIn
+# Subir bytes de la imagen
 upload_headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "image/jpeg"
@@ -120,16 +121,18 @@ up.raise_for_status()
 print("✅ Imagen subida a LinkedIn")
 
 # ── 5. Publicar usando el Endpoint de Posts Moderno ───────────
-# Este endpoint sí acepta tu ID alfanumérico en el parámetro "author"
 headers_post = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "application/json",
-    "LinkedIn-Version": "202401",  # Requerido de forma estricta para /posts
+    "LinkedIn-Version": "202401", 
     "X-Restli-Protocol-Version": "2.0.0"
 }
 
+# CAMBIO CLAVE: Convertimos "urn:li:person:XXXX" a "urn:li:member:XXXX" solo para el autor del post
+author_member_urn = LINKEDIN_PERSON_URN.replace("urn:li:person:", "urn:li:member:")
+
 post_payload = {
-    "author": LINKEDIN_PERSON_URN,
+    "author": author_member_urn,
     "commentary": post_text,
     "visibility": "PUBLIC",
     "distribution": {
