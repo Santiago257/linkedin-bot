@@ -27,7 +27,7 @@ topic = TOPICS[datetime.date.today().weekday() % len(TOPICS)]
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 prompt = f"""
-Eres un expert en {topic}. Crea un post viral para LinkedIn con:
+Eres un experto en {topic}. Crea un post viral para LinkedIn con:
 - Un título gancho de máximo 12 palabras (sin comillas)
 - Una descripción atractiva de 150-200 palabras con emojis
 - 5 hashtags relevantes
@@ -76,15 +76,15 @@ img.save(buffer, format="JPEG")
 image_bytes = buffer.getvalue()
 print("✅ Imagen generada en memoria")
 
-# ── 4. Subir imagen a LinkedIn (API Moderna) ───────────────────
-# Usamos encabezados globales incluyendo la versión obligatoria de la API
+# ── 4. Subir imagen a LinkedIn (API Moderna Corregida) ─────────
+# Ajustamos encabezados globales con formato estricto de versión de API
 headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "application/json",
-    "LinkedIn-Version": "202401" 
+    "X-Restli-Protocol-Version": "2.0.0"  # Obliga al protocolo moderno de LinkedIn
 }
 
-# Inicializar la carga de la imagen
+# Inicializar la carga de la imagen adaptada al formato estricto de la versión
 image_init_payload = {
     "initializeUploadRequest": {
         "owner": LINKEDIN_PERSON_URN
@@ -96,22 +96,26 @@ reg = requests.post(
     "https://api.linkedin.com/v2/images?action=initializeUpload",
     json=image_init_payload, headers=headers
 )
+
+# Captura de error amigable para debuggear si el payload falla
+if reg.status_code != 200:
+    print(f"❌ Error detallado de LinkedIn: {reg.text}")
 reg.raise_for_status()
+
 reg_data = reg.json()
-
 upload_url = reg_data["value"]["uploadUrl"]
-asset_urn  = reg_data["value"]["image"]  # Este es el ID único de la imagen generada (urn:li:image:...)
+asset_urn  = reg_data["value"]["image"]
 
-# Subir los bytes binarios de la imagen
+# Subir los bytes binarios de la imagen sin pasar json
 upload_headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
-    "Content-Type": "image/jpeg",
+    "Content-Type": "image/jpeg"
 }
 up = requests.put(upload_url, data=image_bytes, headers=upload_headers)
 up.raise_for_status()
 print("✅ Imagen subida a los servidores de LinkedIn")
 
-# ── 5. Crear y publicar el Post (API Moderna) ──────────────────
+# ── 5. Crear y publicar el Post ──────────────────────────────────
 post_payload = {
     "author": LINKEDIN_PERSON_URN,
     "commentary": post_text,
