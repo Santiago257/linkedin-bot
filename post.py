@@ -9,7 +9,7 @@ import io
 # ── Configuración ──────────────────────────────────────────────
 GROQ_API_KEY         = os.environ["GROQ_API_KEY"]
 LINKEDIN_TOKEN       = os.environ["LINKEDIN_ACCESS_TOKEN"]
-LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"]
+LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"]  # Debe ser urn:li:member:D4E03AQFmuZM-LfmT4w
 HF_TOKEN             = os.environ["HF_TOKEN"]
 
 TOPICS = [
@@ -76,15 +76,14 @@ img.save(buffer, format="JPEG")
 image_bytes = buffer.getvalue()
 print("✅ Imagen generada en memoria")
 
-# ── 4. Subir imagen a LinkedIn (API Moderna Corregida) ─────────
-# Ajustamos encabezados globales con formato estricto de versión de API
+# ── 4. Subir imagen a LinkedIn (API Versionada) ─────────────────
 headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "application/json",
-    "X-Restli-Protocol-Version": "2.0.0"  # Obliga al protocolo moderno de LinkedIn
+    "LinkedIn-Version": "202401",  # Versión requerida por la API moderna de posts/images
+    "X-Restli-Protocol-Version": "2.0.0"
 }
 
-# Inicializar la carga de la imagen adaptada al formato estricto de la versión
 image_init_payload = {
     "initializeUploadRequest": {
         "owner": LINKEDIN_PERSON_URN
@@ -97,7 +96,6 @@ reg = requests.post(
     json=image_init_payload, headers=headers
 )
 
-# Captura de error amigable para debuggear si el payload falla
 if reg.status_code != 200:
     print(f"❌ Error detallado de LinkedIn: {reg.text}")
 reg.raise_for_status()
@@ -106,7 +104,7 @@ reg_data = reg.json()
 upload_url = reg_data["value"]["uploadUrl"]
 asset_urn  = reg_data["value"]["image"]
 
-# Subir los bytes binarios de la imagen sin pasar json
+# Subida binaria del archivo
 upload_headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "image/jpeg"
@@ -139,5 +137,9 @@ post_resp = requests.post(
     "https://api.linkedin.com/v2/posts",
     json=post_payload, headers=headers
 )
+
+if post_resp.status_code != 201:  # El estatus de creación exitosa en /posts suele ser 201 Created
+    print(f"❌ Error detallado al publicar post: {post_resp.text}")
 post_resp.raise_for_status()
+
 print("✅ ¡Post publicado con éxito en LinkedIn!")
