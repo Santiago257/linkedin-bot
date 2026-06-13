@@ -81,7 +81,7 @@ image_bytes = buffer.getvalue()
 print("✅ Imagen generada en memoria")
 
 # ── 4. Registrar y Subir imagen (Método Assets Exitoso) ────────
-headers = {
+headers_asset = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "application/json",
 }
@@ -102,7 +102,7 @@ register_payload = {
 print("Registrando asset de imagen...")
 reg = requests.post(
     "https://api.linkedin.com/v2/assets?action=registerUpload",
-    json=register_payload, headers=headers
+    json=register_payload, headers=headers_asset
 )
 reg.raise_for_status()
 
@@ -119,36 +119,42 @@ up = requests.put(upload_url, data=image_bytes, headers=upload_headers)
 up.raise_for_status()
 print("✅ Imagen subida a LinkedIn")
 
-# ── 5. Crear el Post vía ugcPosts (Modificado para IDs Modernos) ──
-# Cambiamos la estructura para que acepte tu URN de tipo 'person' alfanumérico sin dar error 422 o 403
-post_payload = {
-    "author": LINKEDIN_PERSON_URN,
-    "lifecycleState": "PUBLISHED",
-    "specificContent": {
-        "com.linkedin.ugc.ShareContent": {
-            "shareCommentary": {"text": post_text},
-            "shareMediaCategory": "IMAGE",
-            "media": [{
-                "status": "READY",
-                "description": {"text": titulo},
-                "media": asset_urn,
-                "title": {"text": titulo}
-            }]
-        }
+# ── 5. Crear el Post usando la API de Share Restli 2.0 ─────────
+# Este es el endpoint universal intermedio que soluciona el error 422 de ugcPosts y el 403 de /posts
+# Acepta autores alfanuméricos tipo person perfectamente
+share_payload = {
+    "owner": LINKEDIN_PERSON_URN,
+    "subject": titulo,
+    "text": {
+        "text": post_text
     },
-    "visibility": {
-        "com.linkedin.ugc.MemberNetworkVisibility": "PUBLIC"
+    "content": {
+        "contentEntities": [{
+            "entity": asset_urn
+        }],
+        "title": titulo
+    },
+    "distribution": {
+        "linkedInDistributionTarget": {
+            "visibleToGuest": True
+        }
     }
 }
 
-print("Publicando post...")
+headers_share = {
+    "Authorization": f"Bearer {LINKEDIN_TOKEN}",
+    "Content-Type": "application/json",
+    "X-Restli-Protocol-Version": "2.0.0"
+}
+
+print("Publicando post vía api shares...")
 post_resp = requests.post(
-    "https://api.linkedin.com/v2/ugcPosts",
-    json=post_payload, headers=headers
+    "https://api.linkedin.com/v2/shares",
+    json=share_payload, headers=headers_share
 )
 
-if post_resp.status_code != 201:
+if post_resp.status_code not in [200, 201]:
     print(f"❌ Error al publicar: {post_resp.text}")
 post_resp.raise_for_status()
 
-print(f"✅ ¡Post publicado exitosamente! ID: {post_resp.headers.get('x-restli-id')}")
+print("✅ ¡Post publicado con éxito total en LinkedIn!")
