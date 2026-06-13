@@ -37,7 +37,7 @@ PROMPT_IMAGEN: [descripción en inglés de una imagen profesional que ilustre el
 """
 
 response = client.models.generate_content(
-    model="gemini-1.5-flash-8b",
+    model="gemini-2.0-flash-lite",
     contents=prompt
 )
 text = response.text
