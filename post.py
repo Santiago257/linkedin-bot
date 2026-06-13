@@ -8,6 +8,7 @@ from groq import Groq
 GROQ_API_KEY         = os.environ["GROQ_API_KEY"]
 LINKEDIN_TOKEN       = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"]
+HF_TOKEN             = os.environ["HF_TOKEN"]
 
 TOPICS = [
     "inteligencia artificial en negocios",
@@ -50,14 +51,18 @@ img_prompt  = re.search(r"PROMPT_IMAGEN:\s*(.+)", text).group(1).strip()
 post_text = f"{titulo}\n\n{descripcion}\n\n{hashtags}"
 print("✅ Texto generado")
 
-# ── 3. Generar imagen con Pollinations.AI ──────────────────────
-import urllib.parse
-encoded_prompt = urllib.parse.quote(img_prompt)
-image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+# ── 3. Generar imagen con Hugging Face ────────────────────────
+hf_headers = {"Authorization": f"Bearer {HF_TOKEN}"}
+hf_payload = {"inputs": img_prompt}
 
-img_response = requests.get(image_url, timeout=60)
-img_response.raise_for_status()
-image_bytes = img_response.content
+hf_response = requests.post(
+    "https://api-inference.huggingface.co/models/stabilityai/stable-diffusion-xl-base-1.0",
+    headers=hf_headers,
+    json=hf_payload,
+    timeout=120
+)
+hf_response.raise_for_status()
+image_bytes = hf_response.content
 print("✅ Imagen generada")
 
 # ── 4. Subir imagen a LinkedIn ──────────────────────────────────
