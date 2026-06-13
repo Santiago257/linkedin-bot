@@ -12,7 +12,7 @@ LINKEDIN_TOKEN       = os.environ["LINKEDIN_ACCESS_TOKEN"]
 LINKEDIN_PERSON_URN  = os.environ["LINKEDIN_PERSON_URN"] 
 HF_TOKEN             = os.environ["HF_TOKEN"]
 
-# Asegurar que el formato base sea estrictamente "urn:li:person:..."
+# Asegurar que el formato base para perfiles modernos sea "urn:li:person:..."
 if not LINKEDIN_PERSON_URN.startswith("urn:li:person:"):
     LINKEDIN_PERSON_URN = f"urn:li:person:{LINKEDIN_PERSON_URN.split(':')[-1]}"
 
@@ -80,37 +80,36 @@ img.save(buffer, format="JPEG")
 image_bytes = buffer.getvalue()
 print("✅ Imagen generada en memoria")
 
-# ── 4. Registrar y Subir imagen (Método Assets Exitoso) ────────
-headers_asset = {
+# ── 4. Carga de Imagen vía API Moderna (/v2/images) ─────────────
+# Se requiere obligatoriamente especificar la versión de la API en los headers globales
+headers_modernos = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "application/json",
+    "LinkedIn-Version": "202401",  # Cabecera de versión mandatoria para /images y /posts
+    "X-Restli-Protocol-Version": "2.0.0"
 }
 
-register_payload = {
-    "registerUploadRequest": {
-        "recipes": ["urn:li:digitalmediaRecipe:feedshare-image"],
-        "owner": LINKEDIN_PERSON_URN,
-        "serviceRelationships": [
-            {
-                "relationshipType": "OWNER",
-                "identifier": "urn:li:userGeneratedContent"
-            }
-        ]
+image_payload = {
+    "initializeUploadRequest": {
+        "owner": LINKEDIN_PERSON_URN
     }
 }
 
-print("Registrando asset de imagen...")
+print("Registrando imagen en la API moderna...")
 reg = requests.post(
-    "https://api.linkedin.com/v2/assets?action=registerUpload",
-    json=register_payload, headers=headers_asset
+    "https://api.linkedin.com/v2/images?action=initializeUpload",
+    json=image_payload, headers=headers_modernos
 )
+
+if reg.status_code != 200:
+    print(f"❌ Error al inicializar imagen: {reg.text}")
 reg.raise_for_status()
 
 reg_data = reg.json()
-upload_url = reg_data["value"]["uploadMechanism"]["com.linkedin.digitalmedia.uploading.MediaUploadHttpRequest"]["uploadUrl"]
-asset_urn  = reg_data["value"]["asset"]
+upload_url = reg_data["value"]["uploadUrl"]
+asset_urn  = reg_data["value"]["image"]
 
-# Carga binaria de los bytes de la imagen
+# Carga de los bytes binarios de la imagen
 upload_headers = {
     "Authorization": f"Bearer {LINKEDIN_TOKEN}",
     "Content-Type": "image/jpeg"
@@ -119,42 +118,33 @@ up = requests.put(upload_url, data=image_bytes, headers=upload_headers)
 up.raise_for_status()
 print("✅ Imagen subida a LinkedIn")
 
-# ── 5. Crear el Post usando la API de Share Restli 2.0 ─────────
-# Este es el endpoint universal intermedio que soluciona el error 422 de ugcPosts y el 403 de /posts
-# Acepta autores alfanuméricos tipo person perfectamente
-share_payload = {
-    "owner": LINKEDIN_PERSON_URN,
-    "subject": titulo,
-    "text": {
-        "text": post_text
+# ── 5. Crear el Post usando /v2/posts (API Moderna Definitiva) ──
+post_payload = {
+    "author": LINKEDIN_PERSON_URN, # Mantenemos 'person' ya que la versión '202401' lo procesa de forma nativa
+    "commentary": post_text,
+    "visibility": "PUBLIC",
+    "distribution": {
+        "feedDistribution": "MAIN_FEED",
+        "targetEntities": [],
+        "thirdPartyDistributionChannels": []
     },
     "content": {
-        "contentEntities": [{
-            "entity": asset_urn
-        }],
-        "title": titulo
-    },
-    "distribution": {
-        "linkedInDistributionTarget": {
-            "visibleToGuest": True
+        "media": {
+            "title": titulo,
+            "id": asset_urn
         }
-    }
+    },
+    "lifecycleState": "PUBLISHED"
 }
 
-headers_share = {
-    "Authorization": f"Bearer {LINKEDIN_TOKEN}",
-    "Content-Type": "application/json",
-    "X-Restli-Protocol-Version": "2.0.0"
-}
-
-print("Publicando post vía api shares...")
+print("Publicando post final...")
 post_resp = requests.post(
-    "https://api.linkedin.com/v2/shares",
-    json=share_payload, headers=headers_share
+    "https://api.linkedin.com/v2/posts",
+    json=post_payload, headers=headers_modernos
 )
 
 if post_resp.status_code not in [200, 201]:
     print(f"❌ Error al publicar: {post_resp.text}")
 post_resp.raise_for_status()
 
-print("✅ ¡Post publicado con éxito total en LinkedIn!")
+print("✅ ¡Post publicado con éxito total en tu perfil de LinkedIn!")
